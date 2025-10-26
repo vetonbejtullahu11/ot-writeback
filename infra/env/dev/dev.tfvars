@@ -1,0 +1,5 @@
+subscription_id = "c3887274-e772-4b79-a755-6ff5aae2ddd0"
+tenant_id       = "af681480-6bcd-40ac-b10c-31b2cfc86df9"
+location        = "westeurope"
+project_name    = "ot-writeback"
+env             = "dev"

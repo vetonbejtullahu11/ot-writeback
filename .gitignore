@@ -1,1 +1,8 @@
-.DS_Store
+# Terraform artifacts
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
