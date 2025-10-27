@@ -8,10 +8,10 @@ resource "azurerm_mssql_server" "sql" {
 }
 
 resource "azurerm_mssql_database" "db" {
-  name           = "${var.name_prefix}-db"
-  server_id      = azurerm_mssql_server.sql.id
-  sku_name       = "S0"
-  zone_redundant = false
-  collation      = "SQL_Latin1_General_CP1_CI_AS"
+  name                                = "${var.name_prefix}-db"
+  server_id                           = azurerm_mssql_server.sql.id
+  sku_name                            = "S0"
+  zone_redundant                      = false
+  collation                           = "SQL_Latin1_General_CP1_CI_AS"
   transparent_data_encryption_enabled = true
 }
