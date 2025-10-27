@@ -40,12 +40,11 @@ module "networking" {
 
 # --- Logic App Standard (System-Assigned MI)
 module "logicapp" {
-  source                 = "./modules/logicapp"
-  resource_group_name    = azurerm_resource_group.rg.name
-  location               = var.location
-  name_prefix            = "${var.project_name}-${var.env}"
-  appi_connection_string = module.monitor.appi_connection_string
+  source = "./modules/logicapp"
 
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  name_prefix         = "${var.project_name}-${var.env}"
 }
 
 
