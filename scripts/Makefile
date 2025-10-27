@@ -9,7 +9,7 @@ dev:
 	-az account show >/dev/null 2>&1 || az login >/dev/null
 
 	cd $(INFRA_DIR) && \
-	$(TF) init -reconfigure >/dev/null && \
+	$(TF) init -reconfigure -upgrade >/dev/null && \
 	$(TF) plan -var-file=$(TFVARS) -out=.tfplan && \
 	$(TF) apply -auto-approve .tfplan && \
 	echo "✅ Dev base infra deployed."

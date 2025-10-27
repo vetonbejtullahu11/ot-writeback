@@ -1,10 +1,3 @@
-variable "subscription_id" {
-  type = string
-}
-
-variable "tenant_id" {
-  type = string
-}
 
 variable "location" {
   type    = string
@@ -20,3 +13,7 @@ variable "env" {
   type    = string
   default = "dev"
 }
+
+variable "vnet_address_space" { type = list(string) }
+variable "apps_subnet_prefix" { type = string }
+variable "data_subnet_prefix" { type = string }
