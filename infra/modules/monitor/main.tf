@@ -1,7 +1,3 @@
-variable "resource_group_name" { type = string }
-variable "location" { type = string }
-variable "name_prefix" { type = string }
-
 resource "azurerm_log_analytics_workspace" "law" {
   name                = "${var.name_prefix}-law"
   location            = var.location

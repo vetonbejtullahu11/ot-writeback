@@ -1,9 +1,3 @@
-variable "resource_group_name" { type = string }
-variable "location"            { type = string }
-variable "name_prefix"         { type = string }
-variable "admin_login"         { type = string }
-variable "admin_password"      { type = string, sensitive = true }
-
 resource "azurerm_mssql_server" "sql" {
   name                         = "${var.name_prefix}-sql"
   resource_group_name          = var.resource_group_name
