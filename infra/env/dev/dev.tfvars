@@ -1,5 +1,8 @@
-subscription_id = "c3887274-e772-4b79-a755-6ff5aae2ddd0"
-tenant_id       = "af681480-6bcd-40ac-b10c-31b2cfc86df9"
-location        = "westeurope"
-project_name    = "ot-writeback"
-env             = "dev"
+location     = "westeurope"
+project_name = "ot-writeback"
+env          = "dev"
+
+# VNet / subnets
+vnet_address_space = ["10.10.0.0/16"]
+apps_subnet_prefix = "10.10.1.0/24"
+data_subnet_prefix = "10.10.2.0/24"

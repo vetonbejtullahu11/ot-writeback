@@ -39,4 +39,18 @@ End-to-end starter for an RPA-friendly **Logic Apps + SQL write-back + Power BI*
    location        = "westeurope"
    project_name    = "ot-writeback"
    env             = "dev"
-```
+
+---
+
+## Terraform Details
+
+### State backend
+This starter uses **local state**. For teams, switch to remote state (Storage Account) later and enable a `backend "azurerm"` block per env.
+
+### Useful commands
+```bash
+cd infra
+terraform fmt -recursive
+terraform validate
+# (later) terraform init -reconfigure
+# (later) terraform plan -var-file=env/dev/dev.tfvars -out=.tfplan
