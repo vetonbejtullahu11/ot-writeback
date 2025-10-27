@@ -1,4 +1,11 @@
 
+variable "admin_password" {
+  type        = string
+  sensitive   = true
+  description = "SQL Server admin password for the dev environment"
+}
+
+
 variable "location" {
   type    = string
   default = "westeurope"

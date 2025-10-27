@@ -51,15 +51,19 @@ module "logicapp" {
 
 # --- SQL Server + DB + Private Endpoint
 module "sql" {
-  source                  = "./modules/sql"
-  resource_group_name     = azurerm_resource_group.rg.name
-  location                = var.location
-  name_prefix             = "${var.project_name}-${var.env}"
-  kv_id                   = azurerm_key_vault.kv.id
-  kv_name                 = azurerm_key_vault.kv.name
-  data_subnet_id          = module.networking.data_subnet_id
-  sql_private_dns_zone_id = module.networking.sql_private_dns_zone_id
+  source = "./modules/sql"
+
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  name_prefix         = "${var.project_name}-${var.env}"
+
+  admin_login    = "sqladminuser"
+  admin_password = var.admin_password
+
+  # If your module expects a subnet for the private endpoint, keep this:
+  data_subnet_id = module.networking.data_subnet_id
 }
+
 
 # Give the current principal access to KV secrets
 resource "azurerm_key_vault_access_policy" "current" {
