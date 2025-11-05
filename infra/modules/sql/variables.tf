@@ -18,6 +18,12 @@ variable "data_subnet_id" {
   type        = string
 }
 
+variable "enable_private_endpoint" {
+  description = "Whether to create a private endpoint for the SQL server"
+  type        = bool
+  default     = true
+}
+
 variable "private_dns_zone_id" {
   description = "Private DNS zone id for privatelink.database.windows.net (can be null to skip link)"
   type        = string

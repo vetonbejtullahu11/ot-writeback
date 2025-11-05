@@ -1,22 +1,25 @@
 # Get details from the currently logged-in Azure CLI context
 data "azurerm_client_config" "current" {}
 
+# Maintain state when moving inline Key Vault resource into module
+moved {
+  from = azurerm_key_vault.kv
+  to   = module.keyvault.azurerm_key_vault.this
+}
+
 # Resource Group
 resource "azurerm_resource_group" "rg" {
   name     = "${var.project_name}-${var.env}-rg"
   location = var.location
 }
 
-# Key Vault (name must be globally unique, alphanumeric and hyphens)
-resource "azurerm_key_vault" "kv" {
-  name                = lower(replace("${var.project_name}-${var.env}-kv", "/[^a-zA-Z0-9-]/", ""))
-  location            = var.location
+# Key Vault
+module "keyvault" {
+  source              = "./modules/keyvault"
   resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  name_prefix         = "${var.project_name}-${var.env}"
   tenant_id           = data.azurerm_client_config.current.tenant_id
-  sku_name            = "standard"
-
-  purge_protection_enabled   = true
-  soft_delete_retention_days = 7
 }
 
 # --- Monitoring (LAW + App Insights)
@@ -61,13 +64,14 @@ module "sql" {
   admin_password = var.admin_password
 
   # If your module expects a subnet for the private endpoint, keep this:
-  data_subnet_id = module.networking.data_subnet_id
+  data_subnet_id      = module.networking.data_subnet_id
+  private_dns_zone_id = module.networking.sql_private_dns_zone_id
 }
 
 
 # Give the current principal access to KV secrets
 resource "azurerm_key_vault_access_policy" "current" {
-  key_vault_id = azurerm_key_vault.kv.id
+  key_vault_id = module.keyvault.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
   object_id    = data.azurerm_client_config.current.object_id
 

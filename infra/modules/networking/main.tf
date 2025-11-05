@@ -19,8 +19,17 @@ resource "azurerm_subnet" "data" {
   address_prefixes     = [var.data_subnet_prefix]
 }
 
-# Optional: only include this if you want the output for it
-# resource "azurerm_private_dns_zone" "sql" {
-#   name                = "privatelink.database.windows.net"
-#   resource_group_name = var.resource_group_name
-# }
+resource "azurerm_private_dns_zone" "sql" {
+  count               = var.create_sql_private_dns_zone ? 1 : 0
+  name                = var.sql_private_dns_zone_name
+  resource_group_name = var.resource_group_name
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "sql" {
+  count                 = var.create_sql_private_dns_zone ? 1 : 0
+  name                  = "${var.vnet_name}-sql-link"
+  resource_group_name   = var.resource_group_name
+  private_dns_zone_name = azurerm_private_dns_zone.sql[0].name
+  virtual_network_id    = azurerm_virtual_network.vnet.id
+  registration_enabled  = false
+}
