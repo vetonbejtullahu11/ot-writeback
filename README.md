@@ -102,3 +102,10 @@ terraform fmt -recursive
 terraform validate
 # (later) terraform init -reconfigure
 # (later) terraform plan -var-file=env/dev/dev.tfvars -out=.tfplan
+## Database schema & migrations (Alembic)
+
+- Canonical DDL lives in `ops/sql/schema.sql`. Update it whenever the OT writeback tables/procs/views evolve.
+- Alembic is configured via `alembic.ini` with scripts under `ops/alembic`. Install dependencies with `pip install -r ops/alembic/requirements.txt`.
+- Provide a connection string through `DATABASE_URL` (e.g., `mssql+pyodbc://sqladminuser:***@server/database?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no`) before running `alembic upgrade head`.
+- Downgrades are intentionally unsupported—add a new migration to revert changes instead.
+- CI/CD: `.github/workflows/alembic.yml` runs `alembic upgrade head` on pushes touching `ops/sql/**`, `ops/alembic/**`, or `alembic.ini`. Configure the workflow secret `AZURE_SQL_CONNECTION_STRING` with a production-ready ODBC connection string so migrations can run automatically.

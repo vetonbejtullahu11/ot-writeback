@@ -1,116 +1,138 @@
 SET NOCOUNT ON;
 
-PRINT '--- Smoke Test: EntityNote idempotent insert ---';
-DECLARE @NoteRequest UNIQUEIDENTIFIER = NEWID();
+DECLARE @CleanupNote UNIQUEIDENTIFIER = NULL;
+DECLARE @CleanupInstance BIGINT = NULL;
+DECLARE @InsertedRuleId BIGINT = NULL;
+DECLARE @InsertedRule BIT = 0;
+DECLARE @HasError BIT = 0;
+DECLARE @ErrorMessage NVARCHAR(4000) = NULL;
+DECLARE @ErrorSeverity INT = 0;
+DECLARE @ErrorState INT = 0;
 
-DECLARE @FirstNote TABLE
-(
-    EntityNoteId BIGINT,
-    EntityId INT,
-    EntityExternalReference NVARCHAR(100),
-    NoteType NVARCHAR(50),
-    NoteText NVARCHAR(MAX),
-    CreatedBy NVARCHAR(256),
-    CreatedUtc DATETIME2(3),
-    RequestId UNIQUEIDENTIFIER
-);
+BEGIN TRY
+    -----------------------------------------------------------------------
+    -- EntityNote idempotency and audit insert
+    -----------------------------------------------------------------------
+    PRINT '--- Smoke Test: EntityNote RequestId idempotency ---';
 
-DECLARE @NoteText NVARCHAR(MAX) = N'Smoke test note created at ' + CONVERT(NVARCHAR(30), SYSUTCDATETIME(), 126);
+    DECLARE @NoteEntityType VARCHAR(64) = 'SmokeEntity';
+    DECLARE @NoteBusinessKey VARCHAR(128) = CONCAT('SMOKE-', CONVERT(VARCHAR(36), NEWID()));
+    DECLARE @NoteRequest UNIQUEIDENTIFIER = NEWID();
 
-INSERT INTO @FirstNote
-EXEC dbo.usp_EntityNote_Write
-    @RequestId = @NoteRequest,
-    @EntityExternalReference = N'ACCT-1001',
-    @NoteType = N'General',
-    @NoteText = @NoteText,
-    @CreatedBy = N'smoke@test.local';
+    INSERT dbo.EntityNote
+        (EntityType, BusinessKey, NoteText, TagsCsv, CreatedByUPN, CreatedByDisplay,
+         CreatedIPAddress, ClientReportName, VisibilityScope, RequestId, SourceSystem, CorrelationId)
+    VALUES
+        (@NoteEntityType, @NoteBusinessKey, N'Smoke test note',
+         N'audit,smoke', 'smoke@test.local', N'Smoke Tester',
+         '127.0.0.1', N'Smoke Harness', 'Team', @NoteRequest, 'SmokeScript', @NoteRequest);
 
-DECLARE @NoteId BIGINT = (SELECT TOP 1 EntityNoteId FROM @FirstNote);
+    SET @CleanupNote = @NoteRequest;
 
-IF @NoteId IS NULL
-    THROW 51000, 'EntityNote insert failed.', 1;
+    BEGIN TRY
+        INSERT dbo.EntityNote
+            (EntityType, BusinessKey, NoteText, CreatedByUPN, VisibilityScope, RequestId, SourceSystem)
+        VALUES
+            (@NoteEntityType, @NoteBusinessKey, N'Should fail', 'smoke@test.local', 'Team', @NoteRequest, 'SmokeScript');
 
-DECLARE @SecondNote TABLE
-(
-    EntityNoteId BIGINT,
-    EntityId INT,
-    EntityExternalReference NVARCHAR(100),
-    NoteType NVARCHAR(50),
-    NoteText NVARCHAR(MAX),
-    CreatedBy NVARCHAR(256),
-    CreatedUtc DATETIME2(3),
-    RequestId UNIQUEIDENTIFIER
-);
+        -- If we get here, uniqueness didn''t fire
+        THROW 61000, 'EntityNote idempotency check failed (duplicate RequestId inserted).', 1;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() NOT IN (2601, 2627)
+            THROW;
+        PRINT 'Duplicate RequestId rejected as expected.';
+    END CATCH;
 
-INSERT INTO @SecondNote
-EXEC dbo.usp_EntityNote_Write
-    @RequestId = @NoteRequest,
-    @EntityExternalReference = N'ACCT-1001',
-    @NoteType = N'General',
-    @NoteText = N'Smoke test duplicate note',
-    @CreatedBy = N'smoke@test.local';
+    IF NOT EXISTS (SELECT 1 FROM dbo.EntityNote WHERE RequestId = @NoteRequest)
+        THROW 61001, 'Smoke note missing after insert.', 1;
 
-DECLARE @NoteIdRepeat BIGINT = (SELECT TOP 1 EntityNoteId FROM @SecondNote);
+    -----------------------------------------------------------------------
+    -- Approval workflow happy path
+    -----------------------------------------------------------------------
+    PRINT '--- Smoke Test: Approval workflow happy path ---';
 
-IF @NoteId <> @NoteIdRepeat
-    THROW 51001, 'EntityNote idempotency check failed (duplicate note created).', 1;
+    DECLARE @ApprovalEntityType VARCHAR(64) = 'SmokeApproval';
+    DECLARE @ApprovalStage VARCHAR(64) = 'Submit';
+    DECLARE @BusinessKey VARCHAR(128) = CONCAT('SMOKE-', CONVERT(VARCHAR(36), NEWID()));
+    DECLARE @ApproverUPN VARCHAR(256) = 'approver.smoke@test.local';
 
-PRINT 'EntityNote idempotency check passed.';
+    IF NOT EXISTS (
+        SELECT 1 FROM dbo.ApproverRule
+        WHERE EntityType = @ApprovalEntityType
+          AND StageCode = @ApprovalStage
+          AND ApproverScope = 'User'
+          AND ApproverRef = @ApproverUPN
+    )
+    BEGIN
+        INSERT dbo.ApproverRule (EntityType, StageCode, ApproverScope, ApproverRef, RequireMode, Priority)
+        VALUES (@ApprovalEntityType, @ApprovalStage, 'User', @ApproverUPN, 'All', 10);
+        SET @InsertedRuleId = SCOPE_IDENTITY();
+        SET @InsertedRule = 1;
+    END
 
-PRINT '--- Smoke Test: Approval workflow happy path ---';
+    DECLARE @StartOutput TABLE (InstanceID BIGINT);
 
-DECLARE @ApprovalStart UNIQUEIDENTIFIER = NEWID();
-DECLARE @Approval TABLE
-(
-    ApprovalInstanceId BIGINT,
-    EntityExternalReference NVARCHAR(100),
-    ApprovalType NVARCHAR(50),
-    Status NVARCHAR(30),
-    RequestedBy NVARCHAR(256),
-    RequestedUtc DATETIME2(3),
-    LastStatusUtc DATETIME2(3),
-    RequestId UNIQUEIDENTIFIER
-);
+    INSERT INTO @StartOutput
+    EXEC dbo.usp_Approval_Start
+        @EntityType = @ApprovalEntityType,
+        @BusinessKey = @BusinessKey,
+        @RequestedByUPN = 'requestor.smoke@test.local',
+        @StageCode = @ApprovalStage;
 
-INSERT INTO @Approval
-EXEC dbo.usp_Approval_Start
-    @RequestId = @ApprovalStart,
-    @EntityExternalReference = N'OPP-2001',
-    @ApprovalType = N'Writeback',
-    @RequestedBy = N'smoke@test.local';
+    SELECT TOP 1 @CleanupInstance = InstanceID FROM @StartOutput;
 
-DECLARE @ApprovalInstanceId BIGINT = (SELECT TOP 1 ApprovalInstanceId FROM @Approval);
+    IF @CleanupInstance IS NULL
+        THROW 62000, 'Approval start failed to return an InstanceID.', 1;
 
-IF @ApprovalInstanceId IS NULL
-    THROW 52000, 'Approval start failed.', 1;
+    IF NOT EXISTS (
+        SELECT 1 FROM dbo.ApprovalAssignment
+        WHERE InstanceID = @CleanupInstance AND ApproverRef = @ApproverUPN
+    )
+        THROW 62001, 'Approval assignments not generated for smoke approver.', 1;
 
-DECLARE @ApprovalActionRequest UNIQUEIDENTIFIER = NEWID();
-DECLARE @ApprovalAction TABLE
-(
-    ApprovalActionId BIGINT,
-    ApprovalInstanceId BIGINT,
-    ActionName NVARCHAR(30),
-    ActionBy NVARCHAR(256),
-    ActionUtc DATETIME2(3),
-    Comment NVARCHAR(1024),
-    RequestId UNIQUEIDENTIFIER
-);
+    EXEC dbo.usp_Approval_Action
+        @InstanceID = @CleanupInstance,
+        @ActorUPN = @ApproverUPN,
+        @ActionType = 'Approve',
+        @Comment = N'Smoke approval executed.',
+        @RequestId = NEWID(),
+        @SourceSystem = 'SmokeScript';
 
-INSERT INTO @ApprovalAction
-EXEC dbo.usp_Approval_Action
-    @RequestId = @ApprovalActionRequest,
-    @ApprovalInstanceId = @ApprovalInstanceId,
-    @ActionName = N'Approved',
-    @ActionBy = N'smoke-approver@test.local',
-    @Comment = N'Smoke approval executed.';
+    IF NOT EXISTS (
+        SELECT 1 FROM dbo.ApprovalInstance
+        WHERE InstanceID = @CleanupInstance AND Status = 'Approved'
+    )
+        THROW 62002, 'Approval instance did not reach Approved status.', 1;
 
-IF NOT EXISTS (SELECT 1 FROM @ApprovalAction WHERE ApprovalInstanceId = @ApprovalInstanceId)
-    THROW 52001, 'Approval action failed.', 1;
+    PRINT 'Approval workflow run succeeded.';
 
-SELECT
-    StatusSnapshot = 'After Approval Action',
-    v.*
-FROM dbo.vApprovalStatus v
-WHERE v.ApprovalInstanceId = @ApprovalInstanceId;
+END TRY
+BEGIN CATCH
+    SET @HasError = 1;
+    SELECT
+        @ErrorMessage = ERROR_MESSAGE(),
+        @ErrorSeverity = ERROR_SEVERITY(),
+        @ErrorState = ERROR_STATE();
+END CATCH;
 
-PRINT 'Smoke tests completed successfully.';
+-- Cleanup artifacts so repeated runs stay idempotent
+IF @CleanupInstance IS NOT NULL
+BEGIN
+    DELETE FROM dbo.ApprovalInstance WHERE InstanceID = @CleanupInstance;
+END
+
+IF @InsertedRule = 1 AND @InsertedRuleId IS NOT NULL
+    DELETE FROM dbo.ApproverRule WHERE RuleID = @InsertedRuleId;
+
+IF @CleanupNote IS NOT NULL
+    DELETE FROM dbo.EntityNote WHERE RequestId = @CleanupNote;
+
+IF @HasError = 1
+BEGIN
+    RAISERROR (ISNULL(@ErrorMessage, 'Smoke test failure.'), ISNULL(NULLIF(@ErrorSeverity, 0), 16), ISNULL(NULLIF(@ErrorState, 0), 1));
+END
+ELSE
+BEGIN
+    PRINT 'Smoke tests completed successfully.';
+END
