@@ -1,12 +1,6 @@
 name: alembic-migrate
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - "alembic.ini"
-      - "ops/sql/**"
-      - "ops/alembic/**"
   workflow_dispatch:
 
 jobs:
